@@ -3,146 +3,180 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MasterList (Local JSON) — SPA</title>
+  <title>MasterList (Categories + Items)</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
-    <div class="card">
-      <div class="header">
-        <div class="left">
-          <h1 id="appTitle">MasterList</h1>
-          <span class="status" id="globalStatus">No file loaded.</span>
-        </div>
-        <div class="right">
-          <button id="btnImport">Import JSON</button>
-          <button id="btnExport" disabled>Export JSON</button>
-          <button id="btnNew" class="secondary">New (Empty)</button>
+  <header class="app-header">
+    <h1>MasterList</h1>
+    <p class="subtitle">Categories + Items (Local Storage)</p>
+  </header>
+
+  <main class="app">
+
+    <!-- Screen: Categories -->
+    <section id="Categories" class="screen">
+      <div class="screen-head">
+        <h2>Categories</h2>
+
+        <div class="row">
+          <!-- Import -->
+          <label class="file">
+            <input id="importFile" type="file" accept="application/json,.json" />
+            <span>Select MasterListDB.json</span>
+          </label>
+          <button id="import_btn" class="primary">Import JSON</button>
+
+          <!-- Export -->
+          <button id="export_btn" class="ghost">Export JSON</button>
         </div>
       </div>
 
-      <section id="Categories" class="screen active">
-        <div class="row">
-          <div class="grow">
-            <input id="category" type="text" placeholder="New category name" />
+      <div class="grid">
+        <div class="card">
+          <label for="category">New category</label>
+          <input id="category" type="text" placeholder="Type a category name" />
+          <div class="row">
+            <button id="AddCategory_btn" class="primary">Add Category</button>
+            <button id="deleteCat_btn" class="danger">Delete Selected</button>
           </div>
-          <button id="AddCategory_btn">Add Category</button>
+          <div id="AddListOutput" class="status" aria-live="polite"></div>
         </div>
 
-        <div class="row">
-          <div class="grow">
-            <select id="ListOptions"></select>
+        <div class="card">
+          <label for="ListOptions">Existing categories</label>
+          <select id="ListOptions"></select>
+
+          <div class="row">
+            <button id="GoAddItem_btn">Add / Remove Items</button>
+            <button id="EditItem_btn">Edit Item</button>
           </div>
-          <button id="GoList">Go List</button>
-          <button id="deleteCat_btn" class="secondary">Delete Category</button>
-          <button id="GoAddItem_btn">Add/Remove Items</button>
-          <button id="EditItem_btn">Edit Item</button>
-          <button id="report_btn">Category Report</button>
+
+          <div class="row">
+            <button id="GoList">Full Report</button>
+            <button id="report_btn">Category Report</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen: addItemstoCategories -->
+    <section id="addItemstoCategories" class="screen hidden">
+      <div class="screen-head">
+        <h2>Add / Remove Items</h2>
+        <button id="ReturnAddCategories" class="ghost">Return to Categories</button>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <label for="categories_item">Category</label>
+          <select id="categories_item"></select>
+
+          <label for="itemtoadd">Item</label>
+          <input id="itemtoadd" type="text" placeholder="Type an item" />
+
+          <div class="row">
+            <button id="additem_btn" class="primary">Add Item</button>
+            <button id="removeItem_btn" class="danger">Remove Item</button>
+          </div>
+
+          <div class="row">
+            <button id="seeList_btn">Full Report</button>
+            <button id="delete_all_items" class="warn">Delete ALL items (keep category names)</button>
+          </div>
+
+          <div id="NoList" class="status" aria-live="polite"></div>
         </div>
 
-        <div class="row">
-          <div class="grow">
-            <textarea id="AddListOutput" placeholder="Status / messages"></textarea>
+        <div class="card">
+          <label for="text_area2">Items in selected category</label>
+          <textarea id="text_area2" readonly rows="16"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen: Categoryreport -->
+    <section id="Categoryreport" class="screen hidden">
+      <div class="screen-head">
+        <h2>Category Report</h2>
+        <button id="go-to-Categories" class="ghost">Return to Categories</button>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <label for="CatChoice">Category</label>
+          <select id="CatChoice"></select>
+
+          <div class="row">
+            <button id="returnToitem_btn">Go to Add / Remove Items</button>
           </div>
         </div>
 
-        <div class="row">
-          <div class="grow scroll-x">
-            <table>
-              <thead>
-                <tr>
-                  <th style="width:240px;">Category</th>
-                  <th>Items (one per line)</th>
-                </tr>
-              </thead>
-              <tbody id="categoriesTableBody"></tbody>
-            </table>
-          </div>
+        <div class="card">
+          <label for="cat_report">Items</label>
+          <textarea id="cat_report" readonly rows="16"></textarea>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <section id="addItemstoCategories" class="screen">
+    <!-- Screen: Report -->
+    <section id="Report" class="screen hidden">
+      <div class="screen-head">
+        <h2>Full Report</h2>
         <div class="row">
-          <div class="grow">
-            <select id="categories_item"></select>
+          <button id="returnTo_Category" class="ghost">Return to Categories</button>
+          <button id="returnToitem_btn_report" class="ghost">Return to Add / Remove Items</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <label for="text_area1">All Categories + Items</label>
+        <textarea id="text_area1" readonly rows="22"></textarea>
+      </div>
+    </section>
+
+    <!-- Screen: edit_Item -->
+    <section id="edit_Item" class="screen hidden">
+      <div class="screen-head">
+        <h2>Edit Item</h2>
+        <button id="editBack_btn" class="ghost">Return to Categories</button>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <label for="editCatChoice">Category</label>
+          <select id="editCatChoice"></select>
+
+          <label for="editItemChoice">Item</label>
+          <select id="editItemChoice"></select>
+
+          <label for="editNewItemInput">New item text</label>
+          <input id="editNewItemInput" type="text" placeholder="Edit the item text" />
+
+          <div class="row">
+            <button id="applyEdit_btn" class="primary">Apply Edit</button>
           </div>
-          <button id="seeList_btn" class="secondary">See List</button>
-          <button id="delete_all_items" class="secondary">Delete All Items</button>
+
+          <div id="editStatus" class="status" aria-live="polite"></div>
         </div>
 
-        <div class="row">
-          <div class="grow">
-            <input id="itemtoadd" type="text" placeholder="Item to add / remove" />
-          </div>
-          <button id="addItem_btn">Add Item</button>
-          <button id="removeItem_btn" class="secondary">Remove Item</button>
-          <span id="NoList" class="label"></span>
+        <div class="card">
+          <h3>Notes</h3>
+          <ul class="notes">
+            <li>Category name is always stored at index [0].</li>
+            <li>Items begin at index [1].</li>
+            <li>Use Import/Export on the Categories screen for backups.</li>
+          </ul>
         </div>
+      </div>
+    </section>
 
-        <div class="row">
-          <div class="grow">
-            <textarea id="text_area2" placeholder="Category items will appear here (one per line)"></textarea>
-          </div>
-        </div>
+  </main>
 
-        <div class="row">
-          <button id="ReturnAddCategories" class="secondary">Return to Categories</button>
-        </div>
-      </section>
+  <footer class="app-footer">
+    <p>Data is stored locally in your browser (localStorage). Use Export for backups.</p>
+  </footer>
 
-      <section id="Categoryreport" class="screen">
-        <div class="row">
-          <div class="grow">
-            <select id="CatChoice"></select>
-          </div>
-          <button id="go-to-Categories" class="secondary">Go to Categories</button>
-        </div>
-        <div class="row">
-          <div class="grow">
-            <textarea id="cat_report" placeholder="Selected category report"></textarea>
-          </div>
-        </div>
-      </section>
-
-      <section id="edit_Item" class="screen">
-        <div class="row">
-          <div class="grow">
-            <select id="editCatChoice"></select>
-          </div>
-          <div class="grow">
-            <select id="editItemChoice"></select>
-          </div>
-        </div>
-        <div class="row">
-          <div class="grow">
-            <input id="editNewItemInput" type="text" placeholder="New item text" />
-          </div>
-          <button id="applyEdit_btn">Apply Edit</button>
-          <button id="editBack_btn" class="secondary">Back</button>
-        </div>
-        <div class="row">
-          <div class="grow">
-            <textarea id="editStatus" placeholder="Edit status / messages"></textarea>
-          </div>
-        </div>
-      </section>
-
-      <section id="Report" class="screen">
-        <div class="row">
-          <button id="returnToitem_btn" class="secondary">Return to Items</button>
-          <button id="returnTo_Category" class="secondary">Return to Categories</button>
-        </div>
-        <div class="row">
-          <div class="grow">
-            <textarea id="text_area1" placeholder="Full report"></textarea>
-          </div>
-        </div>
-      </section>
-
-    </div>
-  </div>
-
-  <input id="fileInput" type="file" accept="application/json,.json" style="display:none" />
   <script src="app.js"></script>
 </body>
 </html>
