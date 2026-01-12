@@ -1,151 +1,160 @@
-/* Core look (based on your extracted Code.org table styles) */
+/* Minimal, readable styling for a single-file SPA */
 
-html { font-size: 100%; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
-
-body{
-  font-family:"Figtree","Noto Sans","Noto Sans Math","Noto Sans Arabic","Noto Sans Armenian","Noto Sans Bengali",
-    "Noto Sans SC","Noto Sans TC","Noto Sans Devanagari","Noto Sans Georgian","Noto Sans Hebrew","Noto Sans JP",
-    "Noto Sans Kannada","Noto Sans Khmer","Noto Sans KR","Noto Sans Myanmar","Noto Sans Sinhala","Noto Sans Tamil",
-    "Noto Sans Telugu","Noto Sans Thai","Noto Sans Thaana",sans-serif;
-  font-weight: 400;
-  font-style: normal;
-  color:#333;
-  background-color:#f2f2f2;
-  margin:0;
+:root {
+  --bg: #0f172a;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --border: rgba(255,255,255,0.12);
+  --primary: #2563eb;
+  --danger: #dc2626;
+  --warn: #f59e0b;
 }
 
-p, pre, span{
-  -webkit-user-select:text; -moz-user-select:text; -ms-user-select:text; user-select:text;
-}
+* { box-sizing: border-box; }
 
-.app{
-  max-width: 1100px;
-  margin: 12px auto;
-  padding: 12px;
-}
-
-.card{
-  background:#fff;
-  border:1px solid #d7d7d7;
-  border-radius: 10px;
-  overflow:hidden;
-}
-
-.header{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  justify-content:space-between;
-  padding: 10px 12px;
-  border-bottom:1px solid #e6e6e6;
-  flex-wrap:wrap;
-}
-
-.header .left, .header .right{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  flex-wrap:wrap;
-}
-
-h1{
-  font-size: 18px;
+body {
   margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  background: linear-gradient(180deg, var(--bg), #070b16);
+  color: var(--text);
 }
 
-button{
-  background-color:#0093a4;
-  border:1px solid gray;
-  color:#fff;
-  padding:8px 12px;
-  border-radius: 8px;
-  font-size:14px;
-  line-height:18px;
-  cursor:pointer;
+.app-header, .app-footer {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 18px 18px 0 18px;
 }
 
-button.secondary{
-  background:#fff;
-  color:#333;
-  border:1px solid #c9c9c9;
+.app-header h1 { margin: 0; font-size: 28px; }
+.subtitle { margin: 6px 0 0 0; color: var(--muted); }
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 18px;
 }
 
-button:disabled{ opacity:0.6; cursor:default; }
-
-input[type="text"], select, textarea{
-  border:1px solid #c9c9c9;
-  border-radius:8px;
-  padding:8px 10px;
-  font-size:14px;
-  font-family: inherit;
-  box-sizing:border-box;
+.screen {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
 }
 
-textarea{
-  width:100%;
-  min-height: 120px;
-  resize: vertical;
+.hidden { display: none; }
+
+.screen-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
-.row{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  flex-wrap:wrap;
-  padding: 10px 12px;
+h2 { margin: 0; font-size: 20px; }
+h3 { margin: 0 0 8px 0; font-size: 16px; color: var(--text); }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
 }
 
-.row .grow{ flex: 1 1 320px; }
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+}
 
-.label{
+.card {
+  background: rgba(0,0,0,0.18);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+label {
+  display: block;
   font-size: 13px;
-  color:#444;
+  color: var(--muted);
+  margin: 10px 0 6px;
 }
 
-.status{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
-  font-size:12px;
-  color:#444;
+input, select, textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 10px;
+  background: rgba(0,0,0,0.25);
+  color: var(--text);
+  outline: none;
 }
 
-.screen{ display:none; }
-.screen.active{ display:block; }
+textarea { resize: vertical; line-height: 1.35; }
 
-table{
-  max-width:100%;
-  width:100%;
-  background-color:transparent;
-  border-collapse:collapse;
-  border-spacing:0;
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
-th{
-  background-color:#5b6770;
-  color:#fff;
-  border:1px solid #fff;
-  text-align:left;
-  font-size:120%;
-  font-family:"Figtree","Noto Sans","Noto Sans Math","Noto Sans Arabic","Noto Sans Armenian","Noto Sans Bengali",
-    "Noto Sans SC","Noto Sans TC","Noto Sans Devanagari","Noto Sans Georgian","Noto Sans Hebrew","Noto Sans JP",
-    "Noto Sans Kannada","Noto Sans Khmer","Noto Sans KR","Noto Sans Myanmar","Noto Sans Sinhala","Noto Sans Tamil",
-    "Noto Sans Telugu","Noto Sans Thai","Noto Sans Thaana",sans-serif;
-  font-style:normal;
-  font-weight:normal;
-  padding:5px;
+button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  cursor: pointer;
 }
 
-td{
-  border:1px solid #fff;
-  padding:6px 8px;
-  background:#fff;
-  vertical-align:top;
+button:hover { background: rgba(255,255,255,0.10); }
+
+button.primary {
+  background: rgba(37,99,235,0.25);
+  border-color: rgba(37,99,235,0.55);
 }
 
-tr:nth-child(even) td{ background:#fafafa; }
+button.danger {
+  background: rgba(220,38,38,0.25);
+  border-color: rgba(220,38,38,0.55);
+}
 
-.scroll-x{ overflow-x:auto; }
+button.warn {
+  background: rgba(245,158,11,0.25);
+  border-color: rgba(245,158,11,0.55);
+}
 
-@media (max-width: 700px){
-  button{ padding:10px 12px; }
-  input[type="text"], select{ width: 100%; }
+button.ghost {
+  background: transparent;
+}
+
+.status {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  min-height: 20px;
+}
+
+.notes {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+label.file {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+}
+
+label.file input[type="file"] {
+  width: 220px;
+  padding: 6px;
 }
