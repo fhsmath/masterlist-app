@@ -9,7 +9,7 @@
 <body>
   <header class="app-header">
     <h1>MasterList</h1>
-    <p class="subtitle">Categories + Items (Local Storage)</p>
+    <p class="subtitle">Categories + Items (Browser Database)</p>
   </header>
 
   <main class="app">
@@ -20,11 +20,7 @@
         <h2>Categories</h2>
 
         <div class="row">
-          <!-- Import -->
-          <label class="file">
-            <input id="importFile" type="file" accept="application/json,.json" />
-            <span>Select MasterListDB.json</span>
-          </label>
+          <!-- Import (file picker opens from button) -->
           <button id="import_btn" class="primary">Import JSON</button>
 
           <!-- Export -->
@@ -174,7 +170,7 @@
   </main>
 
   <footer class="app-footer">
-    <p>Data is stored locally in your browser (localStorage). Use Export for backups.</p>
+    <p>Data is stored locally in your browser database. Use Export for backups and transfer between devices.</p>
   </footer>
 
   <script src="app.js"></script>

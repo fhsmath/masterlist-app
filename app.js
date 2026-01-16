@@ -1,13 +1,28 @@
 // =====================================================
-// MasterList (Categories + Items) - Local Storage Edition
-// Adds: Import MasterListDB.json + Export MasterListDB.json
+// MasterList (Categories + Items) - IndexedDB Edition
+// Adds: Import/Export JSON backups + Persistent storage via IndexedDB
 //
 // Data model:
 //   MasterList = [ ["Category", "Item1", "Item2"], ... ]
 //   Category name is always at index [i][0]
 // =====================================================
 
-const STORAGE_KEY = "MasterListDB_v1";
+// ----------------------------
+// STORAGE CONFIG
+// ----------------------------
+// Primary persistent storage (per-device, per-browser origin)
+const IDB_NAME = "MasterListDB";
+const IDB_VERSION = 1;
+const IDB_STORE = "kv";
+
+// Keys inside the IDB_STORE
+const STORAGE_KEY = "MasterListDB_payload_v1";
+const EXPORT_VERSION_KEY = "MasterListDB_export_counter_v1";
+
+// Export reminder state (per-device)
+const LAST_EXPORT_AT_KEY = "MasterListDB_last_export_at_v1"; // ISO timestamp
+const DIRTY_SINCE_EXPORT_KEY = "MasterListDB_dirty_since_export_v1"; // "1" or "0"
+const EXPORT_INDICATOR_ID = "exportIndicator";
 
 let MasterList = [];
 let option = [];
@@ -29,6 +44,38 @@ function setText(id, value) {
   if (!el) return;
   if ("value" in el) el.value = value;
   else el.textContent = value;
+}
+
+// Writes a user-facing status message to the first available status element.
+// This is defensive: your HTML may use different IDs across screens.
+function setStatus(msg) {
+  const ids = [
+    "AddListOutput",
+    "storageNotice",
+    "StorageNotice",
+    "status",
+    "Status",
+    "NoList"
+  ];
+
+  for (let i = 0; i < ids.length; i++) {
+    if ($(ids[i])) {
+      setText(ids[i], msg);
+      return;
+    }
+  }
+  // Last resort
+  console.log(msg);
+}
+
+function setTextFirst(ids, msg) {
+  for (let i = 0; i < ids.length; i++) {
+    if ($(ids[i])) {
+      setText(ids[i], msg);
+      return true;
+    }
+  }
+  return false;
 }
 
 function getText(id) {
@@ -137,6 +184,13 @@ function itemsToBulletText(arr) {
   return out;
 }
 
+function showDataDiagnostics(context) {
+  const msg = "Data loaded (" + (context || "") + "): " + MasterList.length + " categories." + (MasterList.length ? " First: " + MasterList[0][0] : "");
+  // Prefer AddListOutput if present; otherwise fall back to console.
+  if ($("AddListOutput")) setText("AddListOutput", msg);
+  else console.log(msg);
+}
+
 function display() {
   let text = "";
   for (let i = 0; i < MasterList.length; i++) {
@@ -144,7 +198,10 @@ function display() {
     text += itemsToBulletText(MasterList[i]) + "\n";
     text += "=============\n";
   }
-  setText("text_area1", text);
+  // Write to whichever output area exists in your HTML.
+  if (!setTextFirst(["text_area1", "text_area2", "cat_report"], text)) {
+    console.log(text);
+  }
 }
 
 function showItemsForSelectedCategory() {
@@ -190,7 +247,7 @@ function refreshCategoriesUI() {
     setProperty("ListOptions", "index", 0);
     // do not overwrite status if it has an import/export message
   } else {
-    setText("AddListOutput", "No categories yet.");
+    setStatus("No categories yet.");
   }
 }
 
@@ -257,7 +314,7 @@ function refreshCategoryReportUI() {
 }
 
 // ----------------------------
-// LOCAL STORAGE PERSISTENCE
+// INDEXEDDB PERSISTENCE (primary)
 // ----------------------------
 function makePayload() {
   return {
@@ -268,29 +325,168 @@ function makePayload() {
   };
 }
 
-function saveToStorage() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(makePayload()));
+let __idbPromise = null;
+
+function openIdb() {
+  if (__idbPromise) return __idbPromise;
+
+  __idbPromise = new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("IndexedDB not supported"));
+      return;
+    }
+
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+
+    req.onupgradeneeded = function (e) {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+
+    req.onsuccess = function (e) {
+      resolve(e.target.result);
+    };
+
+    req.onerror = function () {
+      reject(req.error || new Error("Failed to open IndexedDB"));
+    };
+  });
+
+  return __idbPromise;
 }
 
-function loadFromStorage() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
+async function idbGet(key) {
+  const db = await openIdb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readonly");
+    const store = tx.objectStore(IDB_STORE);
+    const req = store.get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("IndexedDB get failed"));
+  });
+}
+
+async function idbSet(key, value) {
+  const db = await openIdb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    const store = tx.objectStore(IDB_STORE);
+    const req = store.put(value, key);
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => reject(req.error || new Error("IndexedDB put failed"));
+  });
+}
+
+async function idbDelete(key) {
+  const db = await openIdb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    const store = tx.objectStore(IDB_STORE);
+    const req = store.delete(key);
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => reject(req.error || new Error("IndexedDB delete failed"));
+  });
+}
+
+// ----------------------------
+// EXPORT REMINDER UI
+// ----------------------------
+function ensureExportIndicator() {
+  // Creates a small status span next to the Export button if your HTML
+  // does not already include one.
+  if ($(EXPORT_INDICATOR_ID)) return;
+
+  const exportBtn = $("export_btn");
+  if (!exportBtn || !exportBtn.parentNode) return;
+
+  const span = document.createElement("span");
+  span.id = EXPORT_INDICATOR_ID;
+  span.style.marginLeft = "10px";
+  span.style.fontSize = "12px";
+  span.style.opacity = "0.85";
+  exportBtn.parentNode.insertBefore(span, exportBtn.nextSibling);
+}
+
+function formatLocalDateTime(iso) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleString();
+  } catch (e) {
+    return "";
+  }
+}
+
+function markDirtySinceExport() {
+  localStorage.setItem(DIRTY_SINCE_EXPORT_KEY, "1");
+  updateExportIndicator();
+}
+
+function markCleanAfterExport() {
+  localStorage.setItem(DIRTY_SINCE_EXPORT_KEY, "0");
+  localStorage.setItem(LAST_EXPORT_AT_KEY, new Date().toISOString());
+  updateExportIndicator();
+}
+
+function updateExportIndicator() {
+  const el = $(EXPORT_INDICATOR_ID);
+  if (!el) return;
+
+  const last = localStorage.getItem(LAST_EXPORT_AT_KEY) || "";
+  const dirty = (localStorage.getItem(DIRTY_SINCE_EXPORT_KEY) || "0") === "1";
+
+  if (!last && dirty) {
+    el.textContent = "Export recommended (no prior export).";
+    return;
+  }
+
+  if (!last && !dirty) {
+    el.textContent = "Last export: (none yet).";
+    return;
+  }
+
+  const when = formatLocalDateTime(last) || last;
+  el.textContent = dirty
+    ? ("Last export: " + when + " — export recommended.")
+    : ("Last export: " + when + ".");
+}
+
+function saveToStorage() {
+  // Fire-and-forget write to IndexedDB. (We keep this non-async so callers
+  // don't have to be rewritten; errors are surfaced via AddListOutput.)
+  idbSet(STORAGE_KEY, makePayload()).catch(() => {
+    setStatus("Save failed: browser storage unavailable.");
+  });
+
+  // Any change to persisted data means the current state differs from the last export.
+  markDirtySinceExport();
+}
+
+async function loadFromStorage() {
+  let obj = null;
+  try {
+    obj = await idbGet(STORAGE_KEY);
+  } catch (e) {
+    obj = null;
+  }
+
+  if (!obj) {
     MasterList = [];
     rebuildCategoryIndex();
     syncCategoryOptions();
     return;
   }
 
-  try {
-    const obj = JSON.parse(raw);
-    const cats = Array.isArray(obj) ? obj : (obj.categories || []);
-    MasterList = Array.isArray(cats) ? cats : [];
-  } catch (e) {
-    MasterList = [];
-  }
+  const cats = Array.isArray(obj) ? obj : (obj.categories || []);
+  MasterList = Array.isArray(cats) ? cats : [];
 
   rebuildCategoryIndex();
   syncCategoryOptions();
+  // Helpful in environments where dropdowns may not be visible/available.
+  if (MasterList.length > 0) showDataDiagnostics("startup");
 }
 
 // ----------------------------
@@ -319,36 +515,94 @@ function setAllFromImported(categories) {
   syncCategoryOptions();
   saveToStorage();
 
-  // Refresh screens in case user is not on Categories
+  // Force the UI to a known-good state so the user immediately sees the imported data.
+  // If your HTML does not implement screen containers, this is a no-op.
+  setScreen("Categories");
+  if (!$("Categories") && $("Report")) setScreen("Report");
+
+  // Select the first category everywhere, if present.
   refreshCategoriesUI();
+  if (option.length > 0) {
+    setProperty("ListOptions", "index", 0);
+    setProperty("categories_item", "index", 0);
+    setProperty("CatChoice", "index", 0);
+    setProperty("editCatChoice", "index", 0);
+  }
+
+  // Refresh all screens in case user navigates immediately.
   refreshAddItemsUI();
   refreshEditScreenUI();
   refreshCategoryReportUI();
+  // Always print a full text summary somewhere so the user can confirm import succeeded.
   display();
+}
+
+
+// ----------------------------
+// IMPORT FILE PICKER (web/iOS friendly)
+// ----------------------------
+// Many mobile browsers (including iOS Safari) will not allow a script to
+// read a file unless the user explicitly selects it via a file picker.
+// This helper ensures we have a hidden <input type="file"> and wires it
+// so clicking the Import button can open the picker and then run the import.
+function ensureImportFileInput() {
+  // Your index.html already includes <input id="importFile">.
+  // In that case, we must still bind the change handler.
+  const existing = $("importFile");
+  if (existing) {
+    if (!existing.__mlImportBound) {
+      existing.addEventListener("change", function () {
+        importFromSelectedFile();
+      });
+      existing.__mlImportBound = true;
+    }
+    return;
+  }
+
+  // Fallback: if no file input exists in the HTML, create a hidden one.
+  const input = document.createElement("input");
+  input.type = "file";
+  input.id = "importFile";
+  input.accept = ".json,application/json";
+  input.style.display = "none";
+
+  input.addEventListener("change", function () {
+    importFromSelectedFile();
+  });
+
+  document.body.appendChild(input);
 }
 
 async function importFromSelectedFile() {
   const input = $("importFile");
   const file = input?.files?.[0];
   if (!file) {
-    setText("AddListOutput", "Select MasterListDB.json first.");
+    setStatus("Select MasterListDB.json first.");
     return;
   }
 
   try {
     const text = await file.text();
     const obj = JSON.parse(text);
-    const cats = Array.isArray(obj) ? obj : (obj.categories || []);
+    // Accept both legacy formats (array) and wrapped payloads (object).
+    // Primary: { categories: [...] }
+    // Back-compat: { MasterList: [...] } or { data: [...] }
+    const cats = Array.isArray(obj)
+      ? obj
+      : (obj.categories || obj.MasterList || obj.data || []);
     const v = validateCategoriesShape(cats);
     if (!v.ok) {
-      setText("AddListOutput", "Import failed: " + v.message);
+      setStatus("Import failed: " + v.message);
       return;
     }
 
     setAllFromImported(cats);
-    setText("AddListOutput", "Imported " + cats.length + " categories from " + file.name + ".");
+    // Show a concise confirmation and keep the imported data visible on-screen.
+    setStatus(
+      "Imported " + cats.length + " categories from " + file.name + ". Now showing " + (option.length || 0) + " categories."
+    );
   } catch (e) {
-    setText("AddListOutput", "Import failed: invalid JSON file.");
+    setStatus("Import failed: invalid JSON file.");
   } finally {
     // allow re-importing same file without reselecting in some browsers
     if (input) input.value = "";
@@ -361,12 +615,26 @@ function exportToJsonFile() {
   const payload = makePayload();
   const jsonText = JSON.stringify(payload, null, 2);
 
+  // Versioned filename: timestamp + monotonic export counter
+  const nextV = (Number(localStorage.getItem(EXPORT_VERSION_KEY) || 0) + 1);
+  localStorage.setItem(EXPORT_VERSION_KEY, String(nextV));
+
+  const d = new Date();
+  const stamp =
+    d.getFullYear() + "-" +
+    String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0") + "_" +
+    String(d.getHours()).padStart(2, "0") + "-" +
+    String(d.getMinutes()).padStart(2, "0");
+
+  const filename = "MasterListDB_" + stamp + "_v" + nextV + ".json";
+
   const blob = new Blob([jsonText], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
 
   const a = document.createElement("a");
   a.href = url;
-  a.download = "MasterListDB.json";
+  a.download = filename;
   a.style.display = "none";
   document.body.appendChild(a);
   a.click();
@@ -377,7 +645,8 @@ function exportToJsonFile() {
     URL.revokeObjectURL(url);
   }, 1000);
 
-  setText("AddListOutput", "Export started: MasterListDB.json (" + MasterList.length + " categories).");
+  markCleanAfterExport();
+  setText("AddListOutput", "Export started: " + filename + " (" + MasterList.length + " categories)." );
 }
 
 
@@ -481,13 +750,10 @@ function removeItemFromSelectedCategory() {
 }
 
 function deleteAllItemsKeepCategories() {
-  // Deletes ONLY the items in the currently selected category on the Add Items screen.
-  // Keeps the category itself (index 0) intact.
   const categoryName = normalize(getText("categories_item"));
 
   if (option.length === 0) {
-    showNoList("No categories yet. Add a category first.");
-    setText("text_area2", "");
+    showNoList("No categories yet.");
     return;
   }
 
@@ -497,29 +763,23 @@ function deleteAllItemsKeepCategories() {
   }
 
   const idx = findCategoryIndex(categoryName);
-  if (idx == -1) {
+  if (idx === -1) {
     showNoList("Category not found.");
     return;
   }
 
-  // If there are no items, do nothing but give clear feedback.
-  if (MasterList[idx].length <= 1) {
-    showItemsForSelectedCategory();
-    showNoList("No items to delete in: " + categoryName);
-    return;
-  }
-
+  // Clear ONLY the selected category's items; keep its name at index 0.
   MasterList[idx] = [MasterList[idx][0]];
+
+  rebuildCategoryIndex();
   saveToStorage();
 
-  // Refresh any screens that might be showing items for this category.
+  syncCategoryOptions();
   showItemsForSelectedCategory();
   refreshEditScreenUI();
   refreshCategoryReportUI();
-
-  showNoList("Deleted all items in: " + categoryName);
+  showNoList("All items deleted for: " + categoryName);
 }
-
 
 function applyEdit() {
   const categoryName = normalize(getText("editCatChoice"));
@@ -556,51 +816,87 @@ function goCategories() { setScreen("Categories"); refreshCategoriesUI(); }
 // ----------------------------
 // EVENT WIRING
 // ----------------------------
+function safeOn(id, event, handler) {
+  const el = $(id);
+  if (!el) {
+    // If an element is missing in the current HTML, skip wiring rather than crashing init.
+    return false;
+  }
+  el.addEventListener(event, handler);
+  return true;
+}
+
+function onClick(id, fn) {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener("click", fn);
+}
+
+function onChange(id, fn) {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener("change", fn);
+}
+
 function wireEvents() {
   // Categories screen
-  $("AddCategory_btn").addEventListener("click", () => addCategory(getText("category")));
-  $("deleteCat_btn").addEventListener("click", deleteSelectedCategory);
+  safeOn("AddCategory_btn", "click", () => addCategory(getText("category")));
+  onClick("deleteCat_btn", deleteSelectedCategory);
 
-  $("GoAddItem_btn").addEventListener("click", goAddItems);
+  onClick("GoAddItem_btn", goAddItems);
 
-  $("GoList").addEventListener("click", () => { setScreen("Report"); display(); });
-  $("EditItem_btn").addEventListener("click", () => { setScreen("edit_Item"); refreshEditScreenUI(); });
-  $("report_btn").addEventListener("click", () => { setScreen("Categoryreport"); refreshCategoryReportUI(); });
+  safeOn("GoList", "click", () => { setScreen("Report"); display(); });
+  safeOn("EditItem_btn", "click", () => { setScreen("edit_Item"); refreshEditScreenUI(); });
+  safeOn("report_btn", "click", () => { setScreen("Categoryreport"); refreshCategoryReportUI(); });
 
   // Import / Export
-  $("import_btn").addEventListener("click", importFromSelectedFile);
-  $("export_btn").addEventListener("click", exportToJsonFile);
+  safeOn("import_btn", "click", function () {
+    ensureImportFileInput();
+    const input = $("importFile");
+    if (!input) {
+      setText("AddListOutput", "Import is unavailable: file picker could not be created.");
+      return;
+    }
+    // If a file is already selected (common on desktop), import immediately.
+    // Otherwise, open the system file picker (required on iOS).
+    if (input.files && input.files[0]) {
+      importFromSelectedFile();
+    } else {
+      input.click();
+    }
+  });
+  onClick("export_btn", exportToJsonFile);
 
   // Add items screen
-  $("categories_item").addEventListener("change", () => { hideNoList(); showItemsForSelectedCategory(); });
-  $("additem_btn").addEventListener("click", addItemToSelectedCategory);
-  $("removeItem_btn").addEventListener("click", removeItemFromSelectedCategory);
-  $("seeList_btn").addEventListener("click", () => { setScreen("Report"); display(); });
-  $("delete_all_items").addEventListener("click", deleteAllItemsKeepCategories);
-  $("ReturnAddCategories").addEventListener("click", goCategories);
+  safeOn("categories_item", "change", () => { hideNoList(); showItemsForSelectedCategory(); });
+  onClick("additem_btn", addItemToSelectedCategory);
+  onClick("removeItem_btn", removeItemFromSelectedCategory);
+  safeOn("seeList_btn", "click", () => { setScreen("Report"); display(); });
+  onClick("delete_all_items", deleteAllItemsKeepCategories);
+  onClick("ReturnAddCategories", goCategories);
 
   // Category report screen
-  $("CatChoice").addEventListener("change", showCatReport);
-  $("go-to-Categories").addEventListener("click", goCategories);
-  $("returnToitem_btn").addEventListener("click", goAddItems);
+  onChange("CatChoice", showCatReport);
+  onClick("go-to-Categories", goCategories);
+  onClick("returnToitem_btn", goAddItems);
 
   // Report screen
-  $("returnTo_Category").addEventListener("click", goCategories);
-  $("returnToitem_btn_report").addEventListener("click", goAddItems);
+  onClick("returnTo_Category", goCategories);
+  onClick("returnToitem_btn_report", goAddItems);
 
   // Edit screen
-  $("editCatChoice").addEventListener("change", () => {
+  safeOn("editCatChoice", "change", () => {
     fillEditItemsDropdown();
     setText("editNewItemInput", "");
     setText("editStatus", "");
   });
-  $("editItemChoice").addEventListener("change", () => {
+  safeOn("editItemChoice", "change", () => {
     const oldItem = getText("editItemChoice");
     setText("editNewItemInput", oldItem);
     setText("editStatus", "");
   });
-  $("applyEdit_btn").addEventListener("click", applyEdit);
-  $("editBack_btn").addEventListener("click", goCategories);
+  onClick("applyEdit_btn", applyEdit);
+  onClick("editBack_btn", goCategories);
 }
 
 // ----------------------------
@@ -619,7 +915,15 @@ function wireEvents() {
 //      - Node:    npx serve .
 //    Then open: http://localhost:8000
 async function tryAutoImportFromJsonFile() {
-  const hasExisting = !!localStorage.getItem(STORAGE_KEY);
+  // Only auto-import if we do not already have a saved payload,
+  // unless the user explicitly requests overwrite.
+  let hasExisting = false;
+  try {
+    const existing = await idbGet(STORAGE_KEY);
+    hasExisting = !!existing;
+  } catch (e) {
+    hasExisting = false;
+  }
   const params = new URLSearchParams(window.location.search);
   const allowOverwrite = params.get("overwrite") === "1";
 
@@ -653,12 +957,16 @@ async function init() {
   hideElement("NoList");
   setProperty("ListOptions", "options", []);
 
+  // Export reminder UI (creates a small status element if missing)
+  ensureExportIndicator();
+  // Initialize display; defaults to "Last export: (none yet)." until first export
+  updateExportIndicator();
+
   // Attempt auto-import first (may populate localStorage)
   await tryAutoImportFromJsonFile();
 
-  // Then load whatever is in localStorage
-
-  loadFromStorage();
+  // Then load whatever is in IndexedDB
+  await loadFromStorage();
   wireEvents();
 
   setScreen("Categories");
