@@ -31,7 +31,7 @@ let CategoryIndex = {}; // category name -> MasterList index
 function $(id) { return document.getElementById(id); }
 
 function setScreen(screenId) {
-  const screens = ["Categories", "addItemstoCategories", "Categoryreport", "Report", "edit_Item"];
+  const screens = ["Categories", "addItemstoCategories", "RemoveItems", "Categoryreport", "Report", "edit_Item"];
   screens.forEach(id => {
     const el = $(id);
     if (!el) return;
@@ -163,6 +163,7 @@ function syncCategoryOptions() {
   rebuildOptionsFromMasterList();
   setProperty("ListOptions", "options", option);
   setProperty("categories_item", "options", option);
+  setProperty("removeCatChoice", "options", option);
   setProperty("editCatChoice", "options", option);
   setProperty("CatChoice", "options", option);
 }
@@ -259,6 +260,45 @@ function refreshAddItemsUI() {
   }
   hideNoList();
   showItemsForSelectedCategory();
+}
+
+function fillRemoveItemsDropdown() {
+  const categoryName = getText("removeCatChoice");
+
+  if (!categoryName) {
+    setProperty("removeItemChoice", "options", []);
+    setText("removePreview", "");
+    setText("removeStatus", "Choose a category.");
+    return;
+  }
+
+  const idx = findCategoryIndex(categoryName);
+  if (idx === -1) {
+    setProperty("removeItemChoice", "options", []);
+    setText("removePreview", "");
+    setText("removeStatus", "Category not found.");
+    return;
+  }
+
+  const items = [];
+  for (let i = 1; i < MasterList[idx].length; i++) items.push(MasterList[idx][i]);
+
+  // Keep UX consistent: show a placeholder option when empty.
+  setProperty("removeItemChoice", "options", items.length ? items : ["No items"]);
+  setProperty("removeItemChoice", "index", 0);
+
+  setText("removePreview", itemsToBulletText(MasterList[idx]));
+  setText("removeStatus", items.length ? "" : "No items to delete in this category.");
+}
+
+function refreshRemoveItemsUI() {
+  if (!ensureValidCategorySelection("removeCatChoice")) {
+    setProperty("removeItemChoice", "options", []);
+    setText("removePreview", "");
+    setText("removeStatus", "No categories yet. Add a category first.");
+    return;
+  }
+  fillRemoveItemsDropdown();
 }
 
 function fillEditItemsDropdown() {
@@ -525,12 +565,14 @@ function setAllFromImported(categories) {
   if (option.length > 0) {
     setProperty("ListOptions", "index", 0);
     setProperty("categories_item", "index", 0);
+    setProperty("removeCatChoice", "index", 0);
     setProperty("CatChoice", "index", 0);
     setProperty("editCatChoice", "index", 0);
   }
 
   // Refresh all screens in case user navigates immediately.
   refreshAddItemsUI();
+  refreshRemoveItemsUI();
   refreshEditScreenUI();
   refreshCategoryReportUI();
   // Always print a full text summary somewhere so the user can confirm import succeeded.
@@ -749,6 +791,54 @@ function removeItemFromSelectedCategory() {
   showNoList("Removed " + removedCount + " time(s): " + itemName);
 }
 
+function removeSelectedItemFromRemoveScreen() {
+  const categoryName = normalize(getText("removeCatChoice"));
+  const itemName = getText("removeItemChoice");
+
+  if (categoryName === "") {
+    setText("removeStatus", "Choose a category.");
+    return;
+  }
+
+  if (itemName === "" || itemName === "No items") {
+    setText("removeStatus", "No item selected to delete.");
+    return;
+  }
+
+  const idx = findCategoryIndex(categoryName);
+  if (idx === -1) {
+    setText("removeStatus", "Category not found.");
+    return;
+  }
+
+  const target = normalize(itemName);
+  const oldArray = MasterList[idx];
+
+  const newArray = [oldArray[0]];
+  let removedCount = 0;
+
+  for (let i = 1; i < oldArray.length; i++) {
+    if (normalize(oldArray[i]) === target) removedCount++;
+    else newArray.push(oldArray[i]);
+  }
+
+  if (removedCount === 0) {
+    setText("removeStatus", "Item not found: " + itemName);
+    return;
+  }
+
+  MasterList[idx] = newArray;
+  saveToStorage();
+
+  // Refresh dependent UIs
+  showItemsForSelectedCategory();
+  refreshEditScreenUI();
+  refreshCategoryReportUI();
+  fillRemoveItemsDropdown();
+
+  setText("removeStatus", "Deleted " + removedCount + " time(s): " + itemName);
+}
+
 function deleteAllItemsKeepCategories() {
   const categoryName = normalize(getText("categories_item"));
 
@@ -811,6 +901,7 @@ function applyEdit() {
 // NAVIGATION
 // ----------------------------
 function goAddItems() { setScreen("addItemstoCategories"); refreshAddItemsUI(); }
+function goRemoveItems() { setScreen("RemoveItems"); refreshRemoveItemsUI(); }
 function goCategories() { setScreen("Categories"); refreshCategoriesUI(); }
 
 // ----------------------------
@@ -870,10 +961,19 @@ function wireEvents() {
   // Add items screen
   safeOn("categories_item", "change", () => { hideNoList(); showItemsForSelectedCategory(); });
   onClick("additem_btn", addItemToSelectedCategory);
-  onClick("removeItem_btn", removeItemFromSelectedCategory);
+  // Remove Item now navigates to a dedicated screen with dropdown selection
+  onClick("removeItem_btn", goRemoveItems);
   safeOn("seeList_btn", "click", () => { setScreen("Report"); display(); });
   onClick("delete_all_items", deleteAllItemsKeepCategories);
   onClick("ReturnAddCategories", goCategories);
+
+  // Remove Items screen
+  safeOn("removeCatChoice", "change", () => {
+    fillRemoveItemsDropdown();
+  });
+  onClick("confirmRemove_btn", removeSelectedItemFromRemoveScreen);
+  onClick("removeBack_btn", goAddItems);
+  onClick("removeReturnCategories", goCategories);
 
   // Category report screen
   onChange("CatChoice", showCatReport);

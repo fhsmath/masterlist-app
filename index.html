@@ -73,6 +73,7 @@
 
           <div class="row">
             <button id="additem_btn" class="primary">Add Item</button>
+            <!-- This now navigates to the dedicated Remove Items screen -->
             <button id="removeItem_btn" class="danger">Remove Item</button>
           </div>
 
@@ -87,6 +88,36 @@
         <div class="card">
           <label for="text_area2">Items in selected category</label>
           <textarea id="text_area2" readonly rows="16"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen: RemoveItems -->
+    <section id="RemoveItems" class="screen hidden">
+      <div class="screen-head">
+        <h2>Remove Items</h2>
+        <button id="removeReturnCategories" class="ghost">Return to Categories</button>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <label for="removeCatChoice">Category</label>
+          <select id="removeCatChoice"></select>
+
+          <label for="removeItemChoice">Item to delete</label>
+          <select id="removeItemChoice"></select>
+
+          <div class="row">
+            <button id="confirmRemove_btn" class="danger">Delete Selected Item</button>
+            <button id="removeBack_btn" class="ghost">Back to Add / Remove Items</button>
+          </div>
+
+          <div id="removeStatus" class="status" aria-live="polite"></div>
+        </div>
+
+        <div class="card">
+          <label for="removePreview">Items in selected category</label>
+          <textarea id="removePreview" readonly rows="16"></textarea>
         </div>
       </div>
     </section>
